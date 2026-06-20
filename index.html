@@ -1502,6 +1502,18 @@
       const res = await fetch('/products.json');
       if(!res.ok) throw new Error('Failed to load product list');
       PRODUCTS = await res.json();
+
+      const urlCategory = new URLSearchParams(window.location.search).get('category');
+      if(urlCategory && document.querySelector(`.cat-chip[data-cat="${urlCategory}"]`)){
+        currentCategory = urlCategory;
+        categorySelect.value = urlCategory;
+        document.querySelectorAll('.cat-chip').forEach(c => {
+          c.classList.toggle('active', c.dataset.cat === urlCategory);
+        });
+        const shopSection = document.getElementById('shop');
+        if(shopSection) shopSection.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+
       renderGrid();
     } catch(err){
       grid.innerHTML = '<p class="no-results">Couldn\'t load products right now. Try refreshing the page.</p>';
