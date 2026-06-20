@@ -1669,7 +1669,7 @@
   },
   {
     "id": "gatling-gun",
-    "name": "Gatling Gun",
+    "name": "Gatling Gun 198 Shots",
     "category": "roman-candles",
     "tag": "Roman Candles",
     "deal": null,
@@ -2006,5 +2006,115 @@
     "price": 199.95,
     "image": "images/salute-to-service.png",
     "video": "https://www.youtube.com/watch?v=asM3r4YOX-0"
+  },
+  {
+    "id": "vortex-candle",
+    "name": "Vortex Candle",
+    "category": "roman-candles",
+    "tag": "Roman Candles",
+    "deal": null,
+    "price": 0,
+    "image": "images/vortex-candle.jpg",
+    "video": "https://www.youtube.com/watch?v=BgFhcB2ZWDs",
+    "soldOut": true
+  },
+  {
+    "id": "american-freedom-train",
+    "name": "American Freedom Train",
+    "category": "500-gram-aerials",
+    "tag": "500 Gram Aerials",
+    "deal": null,
+    "price": 0,
+    "image": "images/american-freedom-train.png",
+    "video": "https://www.youtube.com/watch?v=ooiOmRYtVxU",
+    "soldOut": true
+  },
+  {
+    "id": "electric-hex",
+    "name": "Electric Hex",
+    "category": "500-gram-aerials",
+    "tag": "500 Gram Aerials",
+    "deal": null,
+    "price": 0,
+    "image": "images/electric-hex.png",
+    "video": "https://www.youtube.com/watch?v=7t_F4pVCwWs",
+    "soldOut": true
+  },
+  {
+    "id": "neon-sparkler",
+    "name": "Neon Sparkler",
+    "category": "sparklers",
+    "tag": "Sparklers",
+    "deal": null,
+    "price": 0,
+    "image": "images/neon-sparkler.png",
+    "video": "https://www.youtube.com/watch?v=QoBESyTmXiU",
+    "soldOut": true
+  },
+  {
+    "id": "mission-control",
+    "name": "Mission Control",
+    "category": "500-gram-aerials",
+    "tag": "500 Gram Aerials",
+    "deal": null,
+    "price": 0,
+    "image": "images/mission-control.png",
+    "video": "https://www.youtube.com/watch?v=RtXl8DYurPU",
+    "soldOut": true
+  },
+  {
+    "id": "raise-the-dead-7-case-of-24",
+    "name": "Raise the Dead 7\" (Case of 24)",
+    "category": "60-gram-canister-shells",
+    "tag": "60 Gram Canister Shells",
+    "deal": null,
+    "price": 0,
+    "image": "images/raise-the-dead-7-case-of-24.png",
+    "video": "https://www.youtube.com/watch?v=lEmZfvPOYKk",
+    "soldOut": true
+  },
+  {
+    "id": "strobe-missile",
+    "name": "Strobe Missile",
+    "category": "rockets",
+    "tag": "Rockets",
+    "deal": null,
+    "price": 0,
+    "image": "images/strobe-missile.png",
+    "video": "https://www.youtube.com/watch?v=9Ry-GWnV6lM",
+    "soldOut": true
+  },
+  {
+    "id": "anarchy",
+    "name": "Anarchy",
+    "category": "200-gram-aerials",
+    "tag": "200 Gram (3 for $50)",
+    "deal": null,
+    "price": 0,
+    "image": "images/anarchy.png",
+    "video": "https://www.youtube.com/watch?v=KCAS6wnxeoI",
+    "soldOut": true
+  },
+  {
+    "id": "asteroid-warning",
+    "name": "Asteroid Warning",
+    "category": "200-gram-aerials",
+    "tag": "200 Gram (3 for $50)",
+    "deal": null,
+    "price": 0,
+    "image": "images/asteroid-warning.png",
+    "video": "https://www.youtube.com/watch?v=8-JJwhtmuP0",
+    "soldOut": true
+  },
+  {
+    "id": "chaos-machine",
+    "name": "Chaos Machine",
+    "category": "200-gram-aerials",
+    "tag": "200 Gram (3 for $50)",
+    "deal": null,
+    "price": 0,
+    "image": "images/chaos-machine.png",
+    "video": "https://www.youtube.com/watch?v=nJegsyElfC0",
+    "soldOut": true
   }
 ]
