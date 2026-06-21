@@ -1685,6 +1685,7 @@
 
   function computeCartTotals(){
     let naiveSubtotal = 0;
+    let nonBundleTotal = 0; // total of line items NOT in any bundle-deal category — always fully promo-eligible
     const byCategory = {};
 
     cart.forEach(line => {
@@ -1696,35 +1697,38 @@
         if(!byCategory[p.category]) byCategory[p.category] = { qty: 0, total: 0 };
         byCategory[p.category].qty += line.qty;
         byCategory[p.category].total += lineTotal;
+      } else {
+        nonBundleTotal += lineTotal;
       }
     });
 
     let bundleSavings = 0;
+    // Dollar value of bundle-category items that did NOT make it into a
+    // completed bundle this trip — these are still charged at regular
+    // price, so (unlike the bundled portion) they stay promo-eligible.
+    let bundleLeftoverTotal = 0;
     Object.keys(byCategory).forEach(catId => {
       const deal = BUNDLE_DEALS[catId];
       const group = byCategory[catId];
       const bundles = Math.floor(group.qty / deal.size);
+      const avgPrice = group.total / group.qty;
+      const leftoverQty = group.qty - (bundles * deal.size);
+      bundleLeftoverTotal += leftoverQty * avgPrice;
       if(bundles > 0){
-        const avgPrice = group.total / group.qty;
-        const leftoverQty = group.qty - (bundles * deal.size);
         const discountedGroupTotal = (bundles * deal.price) + (leftoverQty * avgPrice);
         bundleSavings += (group.total - discountedGroupTotal);
       }
     });
 
-    // Promo code: percent off everything EXCEPT line items whose
-    // category is a mix & match bundle deal — those are excluded from
-    // the discount base entirely, not just the bundled portion of them.
+    // Promo code: percent off every dollar still at regular price —
+    // including the leftover, non-bundled portion of mix & match
+    // categories — but never the flat-priced bundled portion itself.
     let promoDiscount = 0;
     let promoStatus = getPromoStatus();
     if(promoStatus && promoStatus.valid){
-      let eligible = 0;
-      cart.forEach(line => {
-        const p = findProduct(line.id);
-        if(!p) return;
-        if(promoStatus.promo.excludeBundleDeals && BUNDLE_DEALS[p.category]) return;
-        eligible += p.price * line.qty;
-      });
+      const eligible = promoStatus.promo.excludeBundleDeals
+        ? nonBundleTotal + bundleLeftoverTotal
+        : naiveSubtotal;
       promoDiscount = eligible * (promoStatus.promo.percent / 100);
     }
 
@@ -1905,7 +1909,7 @@
     }
     const totals = renderReservePricing();
     if(totals.promoDiscount > 0.004){
-      showPromoMessage('"' + typed.toUpperCase() + '" applied — ' + status.promo.percent + '% off (excludes mix & match deal items).', false);
+      showPromoMessage('"' + typed.toUpperCase() + '" applied — ' + status.promo.percent + '% off everything still at regular price (doesn\'t reduce the flat mix & match bundle price itself).', false);
     } else {
       showPromoMessage('"' + typed.toUpperCase() + '" is valid, but everything in your cart right now is a mix & match deal item, so there\'s nothing left to discount.', false);
     }
