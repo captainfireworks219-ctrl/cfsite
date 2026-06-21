@@ -1547,6 +1547,11 @@
       if(!res.ok) throw new Error('Failed to load product list');
       PRODUCTS = await res.json();
 
+      // Restore any cart the visitor left behind on a previous visit,
+      // now that we have the current catalog to validate it against.
+      cart = loadCartFromStorage();
+      renderCart();
+
       const urlCategory = new URLSearchParams(window.location.search).get('category');
       if(urlCategory && document.querySelector(`.cat-chip[data-cat="${urlCategory}"]`)){
         currentCategory = urlCategory;
@@ -1657,6 +1662,40 @@
   mediaModal.addEventListener('click', e => { if(e.target === mediaModal) closeMediaModal(); });
 
   /* ---------- CART ---------- */
+  // Cart persists in the visitor's browser via localStorage, so closing
+  // the tab or coming back later keeps it intact. It's restored once
+  // PRODUCTS has loaded (see loadProducts), filtered against the current
+  // catalog so a stale id or a now-sold-out item can never silently ride
+  // along into checkout. Wrapped in try/catch since some browsers (e.g.
+  // private/incognito mode in certain configurations) can throw on
+  // localStorage access rather than just returning null.
+  const CART_STORAGE_KEY = 'captainFireworksCart';
+
+  function saveCartToStorage(){
+    try { localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart)); }
+    catch(err){ /* storage unavailable — cart just won't persist this session */ }
+  }
+
+  function loadCartFromStorage(){
+    try {
+      const raw = localStorage.getItem(CART_STORAGE_KEY);
+      if(!raw) return [];
+      const parsed = JSON.parse(raw);
+      if(!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(l => l && typeof l.id === 'string' && Number.isInteger(l.qty) && l.qty > 0)
+        .filter(l => {
+          const p = findProduct(l.id);
+          return p && !p.soldOut && !p.callForPrice;
+        });
+    } catch(err){ return []; }
+  }
+
+  function clearCartStorage(){
+    try { localStorage.removeItem(CART_STORAGE_KEY); }
+    catch(err){ /* nothing to clean up if storage was never available */ }
+  }
+
   let cart = [];
   const cartItemsEl = document.getElementById('cartItems');
   const cartBadge = document.getElementById('cartBadge');
@@ -1752,6 +1791,7 @@
   }
 
   function renderCart(){
+    saveCartToStorage();
     const totalQty = cart.reduce((s,l) => s + l.qty, 0);
     cartBadge.hidden = totalQty === 0;
     cartBadge.textContent = totalQty;
@@ -1978,6 +2018,7 @@
       });
       const data = await response.json();
       if(response.ok && data.url){
+        clearCartStorage();
         window.location.href = data.url;
         return;
       }
