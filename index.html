@@ -648,6 +648,23 @@
     padding:13px 15px; font-size:13px; color:var(--muted); line-height:1.55; margin-bottom:16px;
   }
   .pickup-info-box strong{ color:var(--gold); }
+  .promo-box{ text-align:left; margin-bottom:16px; }
+  .promo-box label{
+    display:block; font-family:'Oswald',sans-serif; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:1px; color:var(--gold); margin-bottom:6px;
+  }
+  .promo-input-row{ display:flex; gap:8px; }
+  .promo-input-row input{
+    flex:1 1 auto; padding:11px 13px; border-radius:7px; border:1px solid var(--smoke-line);
+    background:var(--black); color:var(--white); font-family:'Inter',sans-serif; font-size:14px;
+    text-transform:uppercase;
+  }
+  .promo-input-row input:focus{ outline:2px solid var(--gold); outline-offset:1px; }
+  .promo-input-row .btn{ flex:0 0 auto; padding:11px 18px; font-size:13px; }
+  .promo-message{ font-size:12.5px; margin-top:7px; line-height:1.5; }
+  .promo-message.success{ color:var(--ember); }
+  .promo-message.error{ color:#e05a4e; }
+  #reservePromoRow{ color:var(--ember); }
   .reserve-pricing{ text-align:left; margin-bottom:16px; }
   .price-row{
     display:flex; justify-content:space-between; font-family:'Oswald',sans-serif;
@@ -1151,9 +1168,18 @@
         <div class="pickup-info-box">
           <strong>In-store pickup only.</strong> We'll call you at the number above to schedule your pickup time once your order is ready. Pickup location: 142 W Lincoln Hwy, Schererville, IN 46375.
         </div>
+        <div class="promo-box">
+          <label for="promoInput">Promo code</label>
+          <div class="promo-input-row">
+            <input type="text" id="promoInput" placeholder="Enter code" autocomplete="off">
+            <button type="button" class="btn" id="promoApplyBtn">Apply</button>
+          </div>
+          <div class="promo-message" id="promoMessage" hidden></div>
+        </div>
         <div class="reserve-pricing">
           <div class="price-row"><span>Subtotal</span><span id="reserveSubtotal">$0.00</span></div>
           <div class="price-row" id="reserveSavingsRow" hidden><span>Mix &amp; match savings</span><span id="reserveSavings">−$0.00</span></div>
+          <div class="price-row" id="reservePromoRow" hidden><span id="reservePromoLabel">Promo</span><span id="reservePromoSavings">−$0.00</span></div>
           <div class="price-row"><span>Indiana Sales Tax (7%)</span><span id="reserveTax">$0.00</span></div>
           <div class="price-row"><span>Indiana Public Safety Fee (5%)</span><span id="reserveFee">$0.00</span></div>
           <div class="price-row"><span>Non-Cash Adjustment (3%)</span><span id="reserveCardFee">$0.00</span></div>
@@ -1377,6 +1403,24 @@
     }
   };
   const MIX_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>';
+
+  // Promo codes: percent off the merchandise subtotal. When
+  // excludeBundleDeals is true, any product whose category has a
+  // BUNDLE_DEALS entry is left out of the discount base entirely —
+  // mix & match categories never get stacked with a promo code.
+  // This preview copy only drives the on-screen total; the copy in
+  // api/create-checkout.js is what actually gets charged — keep them
+  // in sync whenever a code is added, changed, or retired.
+  const PROMO_CODES = {
+    'LIGHTSFUN': {
+      label: 'LIGHTSFUN — 15% off',
+      percent: 15,
+      excludeBundleDeals: true,
+      // Valid through end of day July 2, 2026, Central time (store's
+      // local time zone) — stops working starting July 3.
+      expiresAt: '2026-07-03T00:00:00-05:00'
+    }
+  };
 
   function escapeHtml(str){
     return String(str)
@@ -1626,6 +1670,19 @@
 
   function findProduct(id){ return PRODUCTS.find(p => p.id === id); }
 
+  // The currently-typed/applied promo code for this session. Persists
+  // across cart edits and modal open/close so it stays applied while
+  // the customer keeps shopping.
+  let appliedPromoCode = '';
+
+  function getPromoStatus(){
+    if(!appliedPromoCode) return null;
+    const promo = PROMO_CODES[appliedPromoCode.trim().toUpperCase()];
+    if(!promo) return { valid:false, message: 'That code isn\'t recognized.' };
+    if(new Date() >= new Date(promo.expiresAt)) return { valid:false, message: 'That code has expired.' };
+    return { valid:true, promo };
+  }
+
   function computeCartTotals(){
     let naiveSubtotal = 0;
     const byCategory = {};
@@ -1655,12 +1712,28 @@
       }
     });
 
-    const subtotal = naiveSubtotal - bundleSavings;
+    // Promo code: percent off everything EXCEPT line items whose
+    // category is a mix & match bundle deal — those are excluded from
+    // the discount base entirely, not just the bundled portion of them.
+    let promoDiscount = 0;
+    let promoStatus = getPromoStatus();
+    if(promoStatus && promoStatus.valid){
+      let eligible = 0;
+      cart.forEach(line => {
+        const p = findProduct(line.id);
+        if(!p) return;
+        if(promoStatus.promo.excludeBundleDeals && BUNDLE_DEALS[p.category]) return;
+        eligible += p.price * line.qty;
+      });
+      promoDiscount = eligible * (promoStatus.promo.percent / 100);
+    }
+
+    const subtotal = naiveSubtotal - bundleSavings - promoDiscount;
     const tax = subtotal * SALES_TAX_RATE;
     const fee = subtotal * PUBLIC_SAFETY_FEE_RATE;
     const cardFee = subtotal * CARD_FEE_RATE;
     const total = subtotal + tax + fee + cardFee;
-    return { naiveSubtotal, bundleSavings, subtotal, tax, fee, cardFee, total };
+    return { naiveSubtotal, bundleSavings, promoDiscount, promoStatus, subtotal, tax, fee, cardFee, total };
   }
 
   function getCartSubtotal(){ return computeCartTotals().subtotal; }
@@ -1774,13 +1847,18 @@
   const reserveSubtotalEl = document.getElementById('reserveSubtotal');
   const reserveSavingsRow = document.getElementById('reserveSavingsRow');
   const reserveSavingsEl = document.getElementById('reserveSavings');
+  const reservePromoRow = document.getElementById('reservePromoRow');
+  const reservePromoLabel = document.getElementById('reservePromoLabel');
+  const reservePromoSavingsEl = document.getElementById('reservePromoSavings');
   const reserveTaxEl = document.getElementById('reserveTax');
   const reserveFeeEl = document.getElementById('reserveFee');
   const reserveCardFeeEl = document.getElementById('reserveCardFee');
   const reserveTotalEl = document.getElementById('reserveTotal');
+  const promoInput = document.getElementById('promoInput');
+  const promoApplyBtn = document.getElementById('promoApplyBtn');
+  const promoMessage = document.getElementById('promoMessage');
 
-  document.getElementById('checkoutBtn').addEventListener('click', () => {
-    if(cart.length === 0){ showToast('Add something to your cart first'); return; }
+  function renderReservePricing(){
     const totals = computeCartTotals();
     reserveSubtotalEl.textContent = '$' + totals.naiveSubtotal.toFixed(2);
     if(totals.bundleSavings > 0.004){
@@ -1789,10 +1867,59 @@
     } else {
       reserveSavingsRow.hidden = true;
     }
+    if(totals.promoDiscount > 0.004){
+      reservePromoRow.hidden = false;
+      reservePromoLabel.textContent = 'Promo (' + appliedPromoCode.trim().toUpperCase() + ')';
+      reservePromoSavingsEl.textContent = '−$' + totals.promoDiscount.toFixed(2);
+    } else {
+      reservePromoRow.hidden = true;
+    }
     reserveTaxEl.textContent = '$' + totals.tax.toFixed(2);
     reserveFeeEl.textContent = '$' + totals.fee.toFixed(2);
     reserveCardFeeEl.textContent = '$' + totals.cardFee.toFixed(2);
     reserveTotalEl.textContent = '$' + totals.total.toFixed(2);
+    return totals;
+  }
+
+  function showPromoMessage(text, isError){
+    promoMessage.textContent = text;
+    promoMessage.className = 'promo-message ' + (isError ? 'error' : 'success');
+    promoMessage.hidden = false;
+  }
+
+  promoApplyBtn.addEventListener('click', () => {
+    const typed = promoInput.value.trim();
+    if(!typed){
+      appliedPromoCode = '';
+      promoMessage.hidden = true;
+      renderReservePricing();
+      return;
+    }
+    appliedPromoCode = typed;
+    const status = getPromoStatus();
+    if(!status || !status.valid){
+      showPromoMessage(status ? status.message : 'That code isn\'t recognized.', true);
+      appliedPromoCode = '';
+      renderReservePricing();
+      return;
+    }
+    const totals = renderReservePricing();
+    if(totals.promoDiscount > 0.004){
+      showPromoMessage('"' + typed.toUpperCase() + '" applied — ' + status.promo.percent + '% off (excludes mix & match deal items).', false);
+    } else {
+      showPromoMessage('"' + typed.toUpperCase() + '" is valid, but everything in your cart right now is a mix & match deal item, so there\'s nothing left to discount.', false);
+    }
+  });
+
+  promoInput.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ e.preventDefault(); promoApplyBtn.click(); }
+  });
+
+  document.getElementById('checkoutBtn').addEventListener('click', () => {
+    if(cart.length === 0){ showToast('Add something to your cart first'); return; }
+    promoInput.value = appliedPromoCode;
+    promoMessage.hidden = true;
+    renderReservePricing();
     modal.classList.add('open');
   });
   document.getElementById('modalClose').addEventListener('click', () => modal.classList.remove('open'));
@@ -1830,8 +1957,11 @@
 
     // Only IDs and quantities are sent — never price. The backend looks
     // up the real price for each id itself, so nothing the browser sends
-    // about cost is ever trusted for the actual charge.
+    // about cost is ever trusted for the actual charge. The promo code
+    // is just the typed string; the backend re-validates and re-computes
+    // the discount itself rather than trusting any amount from here.
     const items = cart.map(line => ({ id: line.id, quantity: line.qty }));
+    const promoCode = appliedPromoCode ? appliedPromoCode.trim() : '';
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Redirecting to secure checkout…';
@@ -1840,7 +1970,7 @@
       const response = await fetch(CHECKOUT_API_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, customer: { name, email, phone, termsAccepted, ageVerified } })
+        body: JSON.stringify({ items, promoCode, customer: { name, email, phone, termsAccepted, ageVerified } })
       });
       const data = await response.json();
       if(response.ok && data.url){

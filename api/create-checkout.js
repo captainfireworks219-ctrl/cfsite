@@ -52,6 +52,21 @@ const BUNDLE_DEALS = {
   '500-gram-4-pack': { size: 4, price: 100, label: '500 Gram — 4 for $100' }
 };
 
+// Promo codes: percent off, excluding mix & match bundle-deal categories
+// entirely when excludeBundleDeals is true. Keep in sync with the
+// PROMO_CODES object in index.html — that copy only drives the
+// on-screen preview; this one is what actually gets charged.
+const PROMO_CODES = {
+  LIGHTSFUN: {
+    label: 'LIGHTSFUN — 15% off',
+    percent: 15,
+    excludeBundleDeals: true,
+    // Valid through end of day July 2, 2026, Central time — stops
+    // working starting July 3.
+    expiresAt: '2026-07-03T00:00:00-05:00'
+  }
+};
+
 const STORE_ADDRESS = '142 W Lincoln Hwy, Schererville, IN 46375';
 
 function findProduct(id) {
@@ -163,9 +178,46 @@ module.exports = async (req, res) => {
       });
     });
 
+    // ---- Promo code: percent off, excluding bundle-deal categories ----
+    // Re-validated here from scratch — the browser's claim that a code
+    // was applied is never trusted, only the code text itself, looked
+    // up against this server's own PROMO_CODES table.
+    const rawPromoCode = String(req.body?.promoCode || '').trim().toUpperCase();
+    let promoApplied = null;
+    if (rawPromoCode) {
+      const promo = PROMO_CODES[rawPromoCode];
+      if (promo && new Date() < new Date(promo.expiresAt)) {
+        const eligibleLines = promo.excludeBundleDeals
+          ? lineMeta.filter((l) => !BUNDLE_DEALS[l.category])
+          : lineMeta;
+        if (eligibleLines.length > 0) {
+          const promoUid = crypto.randomUUID();
+          discounts.push({
+            uid: promoUid,
+            name: promo.label,
+            type: 'FIXED_PERCENTAGE',
+            percentage: String(promo.percent) + '.0',
+            scope: 'LINE_ITEM'
+          });
+          eligibleLines.forEach((l) => {
+            const targetLine = lineItems.find((li) => li.uid === l.uid);
+            const existing = targetLine.applied_discounts || [];
+            targetLine.applied_discounts = [...existing, { discount_uid: promoUid }];
+          });
+          promoApplied = rawPromoCode;
+        }
+      }
+      // An unknown, expired, or fully-ineligible code is silently
+      // ignored rather than failing the whole checkout — worst case the
+      // customer just doesn't get the discount they expected, which the
+      // front end should already have warned them about before this
+      // point.
+    }
+
     const noteParts = [`Pickup at ${STORE_ADDRESS} — call customer to schedule`];
     if (customer?.name) noteParts.push(`Name: ${customer.name}`);
     if (customer?.phone) noteParts.push(`Phone: ${customer.phone}`);
+    if (promoApplied) noteParts.push(`Promo code used: ${promoApplied}`);
     noteParts.push('Age 18+ confirmed at checkout');
     noteParts.push('Terms & Conditions accepted at checkout');
     const note = noteParts.join(' | ').slice(0, 500);
