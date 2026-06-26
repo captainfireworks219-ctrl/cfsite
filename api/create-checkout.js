@@ -52,21 +52,6 @@ const BUNDLE_DEALS = {
   '500-gram-4-pack': { size: 4, price: 100, label: '500 Gram — 4 for $100' }
 };
 
-// Promo codes: percent off, excluding mix & match bundle-deal categories
-// entirely when excludeBundleDeals is true. Keep in sync with the
-// PROMO_CODES object in index.html — that copy only drives the
-// on-screen preview; this one is what actually gets charged.
-const PROMO_CODES = {
-  LIGHTSFUN: {
-    label: 'LIGHTSFUN — 15% off',
-    percent: 15,
-    excludeBundleDeals: true,
-    // Valid through end of day July 2, 2026, Central time — stops
-    // working starting July 3.
-    expiresAt: '2026-07-03T00:00:00-05:00'
-  }
-};
-
 const STORE_ADDRESS = '142 W Lincoln Hwy, Schererville, IN 46375';
 
 function findProduct(id) {
@@ -143,26 +128,17 @@ module.exports = async (req, res) => {
     // JS (computeCartTotals) so the checkout modal preview always matches
     // what gets charged here. ----
     const discounts = [];
-    // Dollar total of every line item that belongs to ANY bundle-deal
-    // category, and the portion of that which did NOT get consumed by a
-    // completed bundle this trip (still priced regular — promo-eligible).
-    let bundleCategoryTotal = 0;
-    let bundleLeftoverTotal = 0;
     Object.entries(BUNDLE_DEALS).forEach(([categoryId, deal]) => {
       const linesInCategory = lineMeta.filter((l) => l.category === categoryId);
       if (linesInCategory.length === 0) return;
 
       const totalQty = linesInCategory.reduce((s, l) => s + l.qty, 0);
-      const groupTotal = linesInCategory.reduce((s, l) => s + l.price * l.qty, 0);
-      bundleCategoryTotal += groupTotal;
-
       const bundles = Math.floor(totalQty / deal.size);
-      const avgPrice = groupTotal / totalQty;
-      const leftoverQty = totalQty - bundles * deal.size;
-      bundleLeftoverTotal += leftoverQty * avgPrice;
-
       if (bundles === 0) return;
 
+      const groupTotal = linesInCategory.reduce((s, l) => s + l.price * l.qty, 0);
+      const avgPrice = groupTotal / totalQty;
+      const leftoverQty = totalQty - bundles * deal.size;
       const discountedGroupTotal = bundles * deal.price + leftoverQty * avgPrice;
       const savings = groupTotal - discountedGroupTotal;
       if (savings <= 0) return;
@@ -187,53 +163,9 @@ module.exports = async (req, res) => {
       });
     });
 
-    // ---- Promo code: percent off every dollar still at regular price,
-    // including the leftover (non-bundled) portion of mix & match
-    // categories, but never the flat-priced bundled portion itself.
-    // Applied as a single ORDER-scoped dollar discount rather than
-    // tagging individual lines, since Square can't split one line item
-    // into "some units at bundle price, some at regular price" for
-    // discount purposes — this still produces the exact correct total.
-    // Re-validated here from scratch — the browser's claim that a code
-    // was applied is never trusted, only the code text itself, looked
-    // up against this server's own PROMO_CODES table.
-    const rawPromoCode = String(req.body?.promoCode || '').trim().toUpperCase();
-    let promoApplied = null;
-    if (rawPromoCode) {
-      const promo = PROMO_CODES[rawPromoCode];
-      if (promo && new Date() < new Date(promo.expiresAt)) {
-        const totalLineItemAmount = lineMeta.reduce((s, l) => s + l.price * l.qty, 0);
-        const nonBundleTotal = totalLineItemAmount - bundleCategoryTotal;
-        const eligibleAmount = promo.excludeBundleDeals
-          ? nonBundleTotal + bundleLeftoverTotal
-          : totalLineItemAmount;
-        const promoDiscountAmount = eligibleAmount * (promo.percent / 100);
-        if (promoDiscountAmount > 0.004) {
-          const promoUid = crypto.randomUUID();
-          discounts.push({
-            uid: promoUid,
-            name: promo.label,
-            type: 'FIXED_AMOUNT',
-            amount_money: {
-              amount: Math.round(promoDiscountAmount * 100),
-              currency: 'USD'
-            },
-            scope: 'ORDER'
-          });
-          promoApplied = rawPromoCode;
-        }
-      }
-      // An unknown, expired, or fully-ineligible code is silently
-      // ignored rather than failing the whole checkout — worst case the
-      // customer just doesn't get the discount they expected, which the
-      // front end should already have warned them about before this
-      // point.
-    }
-
     const noteParts = [`Pickup at ${STORE_ADDRESS} — call customer to schedule`];
     if (customer?.name) noteParts.push(`Name: ${customer.name}`);
     if (customer?.phone) noteParts.push(`Phone: ${customer.phone}`);
-    if (promoApplied) noteParts.push(`Promo code used: ${promoApplied}`);
     noteParts.push('Age 18+ confirmed at checkout');
     noteParts.push('Terms & Conditions accepted at checkout');
     const note = noteParts.join(' | ').slice(0, 500);
